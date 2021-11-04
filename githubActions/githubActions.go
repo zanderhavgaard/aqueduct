@@ -1,23 +1,21 @@
-package github
+package githubActions
 
 import (
-	"fmt"
 	"io/ioutil"
 
 	"github.com/goccy/go-yaml"
 	"github.com/zanderhavgaard/aqueduct/runner"
 )
 
-func Prepare(filename string) (Workflow, error) {
+func Prepare(filename string) (runner.Run, error) {
 	workflow, err := readYaml(filename)
 	if err != nil {
 		panic(err)
 	}
 
 	run, err := workflow.MakeRun()
-	fmt.Println(run)
 
-	return workflow, nil
+	return run, nil
 }
 
 // each step in a job
@@ -62,26 +60,30 @@ func (w Workflow) MakeRun() (runner.Run, error) {
 
 	for jobName, jobConfig := range w.Jobs {
 
-		// steps := []runner.Task{}
-
-		// fmt.Println()
-		fmt.Println(jobName)
-		// fmt.Println(jobConfig.Steps)
-		// fmt.Println()
+		tasks := []runner.Task{}
 
 		for _, step := range jobConfig.Steps {
-			fmt.Println()
-			fmt.Println(step)
-			fmt.Println()
+			task := runner.Task{
+				Name:    step.Name,
+				Command: step.Run,
+			}
+			tasks = append(tasks, task)
 		}
 
-		// cont := runner.Container{
-		// Name: jobName,
-		// }
+		// default image
+		image := "ubuntu:latest"
 
-		// fmt.Println(cont)
-		// foo := append(containers, cont)
-		// fmt.Println(foo)
+		if jobConfig.RunsOn == "ubuntu-latest" {
+			image = "ubuntu:latest"
+		}
+
+		container := runner.Container{
+			Name:  jobName,
+			Image: image,
+			Tasks: tasks,
+		}
+
+		containers = append(containers, container)
 	}
 
 	run := runner.Run{

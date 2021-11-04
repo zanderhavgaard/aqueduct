@@ -4,24 +4,34 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/zanderhavgaard/aqueduct/github"
+	"github.com/zanderhavgaard/aqueduct/githubActions"
+	"github.com/zanderhavgaard/aqueduct/runner"
 )
 
 var platform string
 var filename string
 
-const githubPlatformName string = "github"
+const githubActionsPlatformName string = "github-actions"
 
 func main() {
 	parseCliArgs()
 	// fmt.Println(platform, filename)
 
-	fmt.Println("Using platform:", platform, "on file:", filename)
+	fmt.Println("---")
+	fmt.Println("Using platform:", platform)
+	fmt.Println("On file:", filename)
 	fmt.Println("---")
 
-	if platform == githubPlatformName {
-		_, _ = github.Prepare(filename)
-		// fmt.Println(workflow)
+	if platform == githubActionsPlatformName {
+		run, err := githubActions.Prepare(filename)
+		if err != nil {
+			panic(err)
+		}
+		executionMode := "all"
+		err = runner.ExecuteRun(run, executionMode)
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		fmt.Println("You must specify the platform with the -platform option.")
 	}
