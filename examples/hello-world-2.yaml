@@ -1,0 +1,18 @@
+---
+name: hello-world
+on: push
+jobs:
+  my-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: my-step
+        run: echo "Hello World!"
+      - name: my-second-step
+        run: echo "world hello!"
+  my-second-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: a-step
+        run: echo "foo"
+      - name: b-step
+        run: echo "bar"
