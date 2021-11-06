@@ -7,3 +7,8 @@ jobs:
     steps:
       - name: my-step
         run: echo "Hello World!"
+
+      - name: longer-step
+        run: apt update
+
+      - run: apt install -y neovim

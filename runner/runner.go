@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"os"
 	"strings"
 	"time"
 
@@ -14,12 +12,16 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+
+	"github.com/zanderhavgaard/aqueduct/settings"
 )
 
 // task to run in a container
 type Task struct {
 	Name    string
+	Type    string
 	Command string
+	Uses    string
 }
 
 // a container to run tasks in
@@ -45,17 +47,29 @@ func (c Container) executeTasks() error {
 	}
 
 	// pull the image before starting container
-	imagePullOutput, err := dockerClient.ImagePull(ctx, c.Image, types.ImagePullOptions{})
-	if err != nil {
-		panic(err)
-	}
-	io.Copy(os.Stdout, imagePullOutput)
+	err = c.pullDockerImage()
+
+	// imagePullOutput, err := dockerClient.ImagePull(ctx, c.Image, types.ImagePullOptions{})
+	// if err != nil {
+	// panic(err)
+	// }
+	// io.Copy(os.Stdout, imagePullOutput)
 
 	containerName := c.Name
 	containerConfig := container.Config{
 		Image: c.Image,
 		// Cmd:   []string{"cat", "/etc/os-release"},
 		Cmd: []string{"tail", "-f", "/dev/null"},
+	}
+
+	// check if there is another container with the same name
+	containerNameIsFree, err := c.checkContainerNameIsFree(ctx, dockerClient)
+	// TODO add setting to toggle whether to remove conflicting containers
+	if !containerNameIsFree {
+		err = c.StopAndRemoveByName(ctx, dockerClient)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	// create container
@@ -75,7 +89,11 @@ func (c Container) executeTasks() error {
 
 	for index, task := range c.Tasks {
 		fmt.Println("Task", index, "...")
-		task.execute(ctx, dockerClient, containerResponse)
+		returnCode, err := task.execute(ctx, dockerClient, containerResponse)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(returnCode)
 	}
 
 	// wait for the container to finish running
@@ -97,10 +115,9 @@ func (c Container) executeTasks() error {
 
 	// define the timeout for stopping the containers
 	// var timeout time.Duration = time.Second * 30
-	var timeout time.Duration = time.Second * 0
 
 	// stop containers, allowing for graceful shutdown
-	err = dockerClient.ContainerStop(ctx, containerResponse.ID, &timeout)
+	err = dockerClient.ContainerStop(ctx, containerResponse.ID, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -114,8 +131,127 @@ func (c Container) executeTasks() error {
 	return nil
 }
 
-func (t Task) execute(ctx context.Context, dockerClient *client.Client, containerResponse container.ContainerCreateCreatedBody) error {
+func (c Container) pullDockerImage() error {
+	if settings.Global.SkipImagePull {
+		fmt.Println("Skipping image pull")
+		return nil
+	}
+	fmt.Println("--- Image pull ---")
+	fmt.Println("Pulling image for:", c.Image)
+
+	// setup context
+	ctx := context.Background()
+	// get a docker client
+	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		panic(err)
+	}
+
+	// pull the image before starting container
+	imagePullOutput, err := dockerClient.ImagePull(ctx, c.Image, types.ImagePullOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	// io.Copy(os.Stdout, imagePullOutput)
+	stdout, err := ioutil.ReadAll(imagePullOutput)
+	if err != nil {
+		panic(err)
+	}
+
+	stdOutAsString := string(stdout)
+	if strings.Contains(stdOutAsString, "Image is up to date") {
+		fmt.Println("Image is up-to-date")
+		if settings.Global.Verbose {
+			fmt.Println("Verbose output:")
+			fmt.Println(stdOutAsString)
+		}
+	} else {
+		fmt.Println("Downloaded newer image.")
+		if settings.Global.Verbose {
+			fmt.Println("Verbose output:")
+			fmt.Println(stdOutAsString)
+		}
+	}
+
+	fmt.Println("------")
+	return nil
+}
+
+func (c Container) checkContainerNameIsFree(ctx context.Context, dockerClient *client.Client) (bool, error) {
+	fmt.Println("Checking that the container name is available ...")
+	free := true
+	options := types.ContainerListOptions{}
+	// get list of containers
+	containers, err := dockerClient.ContainerList(ctx, options)
+	if err != nil {
+		panic(err)
+	}
+	for _, container := range containers {
+		for _, name := range container.Names {
+			// docker adds a '/' in front of the name
+			nameNoLeadingSlash := strings.Replace(name, "/", "", 1)
+			if nameNoLeadingSlash == c.Name {
+				free = false
+			}
+		}
+	}
+	return free, nil
+}
+
+func (c Container) StopAndRemoveByName(ctx context.Context, dockerClient *client.Client) error {
+	fmt.Println("Removing container with name", c.Name)
+	// get list of containers
+	options := types.ContainerListOptions{}
+	containers, err := dockerClient.ContainerList(ctx, options)
+	if err != nil {
+		panic(err)
+	}
+	// get the ID of the container with the matching name
+	id := ""
+	for _, container := range containers {
+		for _, name := range container.Names {
+			// docker adds a '/' in front of the name
+			nameNoLeadingSlash := strings.Replace(name, "/", "", 1)
+			if nameNoLeadingSlash == c.Name {
+				id = container.ID
+			}
+		}
+	}
+
+	timeout := time.Second * 0
+	err = dockerClient.ContainerStop(ctx, id, &timeout)
+	if err != nil {
+		panic(err)
+	}
+	removeOptions := types.ContainerRemoveOptions{}
+	err = dockerClient.ContainerRemove(ctx, id, removeOptions)
+
+	return nil
+}
+
+func (t Task) execute(ctx context.Context, dockerClient *client.Client, containerResponse container.ContainerCreateCreatedBody) (int, error) {
+
+	if t.Type == "shell" {
+		return t.executeShellCommand(ctx, dockerClient, containerResponse)
+	} else if t.Type == "github-action" {
+		return t.executeGithubAction(ctx, dockerClient, containerResponse)
+	} else {
+		panic("Task type not implemented")
+	}
+}
+
+func (t Task) executeGithubAction(ctx context.Context, dockerClient *client.Client, containerResponse container.ContainerCreateCreatedBody) (int, error) {
+	panic("Github actions are not implemented yet")
+}
+
+func (t Task) executeShellCommand(ctx context.Context, dockerClient *client.Client, containerResponse container.ContainerCreateCreatedBody) (int, error) {
+
+	fmt.Println("Executing shell command ...")
+
+	// setup command to execute as a slice
 	cmd := strings.Split(t.Command, " ")
+
 	// create config for task to execute
 	execConfig := types.ExecConfig{
 		AttachStdout: true,
@@ -158,7 +294,7 @@ func (t Task) execute(ctx context.Context, dockerClient *client.Client, containe
 
 	case <-ctx.Done():
 		// return execResult, ctx.Err()
-		return nil
+		return 1, nil
 	}
 
 	stdout, err := ioutil.ReadAll(&outBuf)
@@ -184,15 +320,11 @@ func (t Task) execute(ctx context.Context, dockerClient *client.Client, containe
 
 	// ====
 
-	return nil
+	return exitCode, nil
 }
 
 // execute tasks in containers for the run
 func ExecuteRun(run Run, mode string) error {
-
-	fmt.Println("---")
-	fmt.Println(run)
-	fmt.Println("---")
 
 	if mode == "all" {
 		fmt.Println("Running all tasks in run ...")

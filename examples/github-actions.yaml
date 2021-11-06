@@ -1,0 +1,17 @@
+---
+name: hello-world
+on: push
+jobs:
+  my-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: my-step
+        run: echo "Hello World!"
+
+      - name: longer-step
+        run: apt update
+
+      - run: apt install -y neovim

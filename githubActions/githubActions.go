@@ -22,6 +22,7 @@ func Prepare(filename string) (runner.Run, error) {
 type Step struct {
 	Name string `yaml:"name"`
 	Run  string `yaml:"run"`
+	Uses string `yaml:"uses"`
 }
 
 // each job in the workflow
@@ -64,8 +65,16 @@ func (w Workflow) MakeRun() (runner.Run, error) {
 
 		for _, step := range jobConfig.Steps {
 			task := runner.Task{
-				Name:    step.Name,
-				Command: step.Run,
+				Name: step.Name,
+			}
+			if step.Run != "" {
+				task.Type = "shell"
+				task.Command = step.Run
+			} else if step.Uses != "" {
+				task.Type = "github-action"
+				task.Uses = step.Uses
+			} else {
+				panic("Step type not implemented")
 			}
 			tasks = append(tasks, task)
 		}
