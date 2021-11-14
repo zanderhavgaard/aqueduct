@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/fatih/color"
 
 	"github.com/zanderhavgaard/aqueduct/settings"
 )
@@ -64,11 +65,14 @@ func (c Container) executeTasks() error {
 
 	// check if there is another container with the same name
 	containerNameIsFree, err := c.checkContainerNameIsFree(ctx, dockerClient)
-	// TODO add setting to toggle whether to remove conflicting containers
-	if !containerNameIsFree {
-		err = c.StopAndRemoveByName(ctx, dockerClient)
-		if err != nil {
-			panic(err)
+	if settings.Global.RemoveConflictingContainers {
+		if !containerNameIsFree {
+			color.Magenta(fmt.Sprintf("Removing container with conflicting name %s ...", c.Name))
+			err = c.StopAndRemoveByName(ctx, dockerClient)
+			if err != nil {
+				panic(err)
+			}
+			color.Green("Removed conflicting container.")
 		}
 	}
 
@@ -77,27 +81,38 @@ func (c Container) executeTasks() error {
 	if err != nil {
 		panic(err)
 	}
+	containerID := containerResponse.ID
+	fmt.Println("Created container with ID:", containerID)
 
+	fmt.Println("Starting container ...")
 	// actually start the container
-	err = dockerClient.ContainerStart(ctx, containerResponse.ID, types.ContainerStartOptions{})
+	err = dockerClient.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
 	if err != nil {
 		panic(err)
 	}
 
-	// Print the ID
-	fmt.Println("Running Job", c.Name, "in Container:", containerResponse.ID)
+	// how many tasks to run in this container
+	num_tasks := len(c.Tasks)
+
+	color.Magenta("Executing tasks ...")
 
 	for index, task := range c.Tasks {
-		fmt.Println("Task", index, "...")
+
+		color.Blue("--- Setting up task")
+		color.Blue(fmt.Sprintf("Execting task %d of %d", index+1, num_tasks))
+		color.Blue(fmt.Sprintf("Task name: %s", task.Name))
+
 		returnCode, err := task.execute(ctx, dockerClient, containerResponse)
 		if err != nil {
 			panic(err)
 		}
+
 		fmt.Println(returnCode)
+		color.Green(fmt.Sprintf("Done execting task: %s", task.Name))
 	}
 
 	// wait for the container to finish running
-	// statusCh, errCh := dockerClient.ContainerWait(ctx, containerResponse.ID, container.WaitConditionNotRunning)
+	// statusCh, errCh := dockerClient.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 	// select {
 	// case err := <-errCh:
 	// if err != nil {
@@ -108,24 +123,33 @@ func (c Container) executeTasks() error {
 	// }
 
 	// print logs from the container
-	// logsOutput, err := dockerClient.ContainerLogs(ctx, containerResponse.ID, types.ContainerLogsOptions{ShowStdout: true})
+	// logsOutput, err := dockerClient.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{ShowStdout: true})
 
 	// fmt.Println("foo", logsOutput)
 	// stdcopy.StdCopy(os.Stdout, os.Stderr, logsOutput)
 
 	// define the timeout for stopping the containers
 	// var timeout time.Duration = time.Second * 30
+	var timeout time.Duration
 
-	// stop containers, allowing for graceful shutdown
-	err = dockerClient.ContainerStop(ctx, containerResponse.ID, nil)
+	if settings.Global.GracefulContainerShutdown {
+		// stop containers, allowing for graceful shutdown
+		err = dockerClient.ContainerStop(ctx, containerID, nil)
+	} else {
+		// stop container immediately
+		timeout = time.Second * 0
+		err = dockerClient.ContainerStop(ctx, containerID, &timeout)
+	}
 	if err != nil {
 		panic(err)
 	}
 
 	//  remove containers
-	err = dockerClient.ContainerRemove(ctx, containerResponse.ID, types.ContainerRemoveOptions{})
-	if err != nil {
-		panic(err)
+	if settings.Global.RemoveContainers {
+		err = dockerClient.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{})
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return nil
@@ -133,11 +157,10 @@ func (c Container) executeTasks() error {
 
 func (c Container) pullDockerImage() error {
 	if settings.Global.SkipImagePull {
-		fmt.Println("Skipping image pull")
+		color.Green("Skipping docker image pull.")
 		return nil
 	}
-	fmt.Println("--- Image pull ---")
-	fmt.Println("Pulling image for:", c.Image)
+	color.Magenta(fmt.Sprintf("Pulling docker image: %s ...", c.Image))
 
 	// setup context
 	ctx := context.Background()
@@ -161,25 +184,24 @@ func (c Container) pullDockerImage() error {
 
 	stdOutAsString := string(stdout)
 	if strings.Contains(stdOutAsString, "Image is up to date") {
-		fmt.Println("Image is up-to-date")
+		color.Green("Image is up-to-date")
 		if settings.Global.Verbose {
-			fmt.Println("Verbose output:")
+			fmt.Println("Verbose image pull output:")
 			fmt.Println(stdOutAsString)
 		}
 	} else {
-		fmt.Println("Downloaded newer image.")
+		color.Green("Downloaded newer image.")
 		if settings.Global.Verbose {
-			fmt.Println("Verbose output:")
+			fmt.Println("Verbose image pull output:")
 			fmt.Println(stdOutAsString)
 		}
 	}
 
-	fmt.Println("------")
 	return nil
 }
 
 func (c Container) checkContainerNameIsFree(ctx context.Context, dockerClient *client.Client) (bool, error) {
-	fmt.Println("Checking that the container name is available ...")
+	color.Magenta("Checking that the container name is free ...")
 	free := true
 	options := types.ContainerListOptions{}
 	// get list of containers
@@ -226,6 +248,9 @@ func (c Container) StopAndRemoveByName(ctx context.Context, dockerClient *client
 	}
 	removeOptions := types.ContainerRemoveOptions{}
 	err = dockerClient.ContainerRemove(ctx, id, removeOptions)
+	if err != nil {
+		panic(err)
+	}
 
 	return nil
 }
@@ -326,14 +351,32 @@ func (t Task) executeShellCommand(ctx context.Context, dockerClient *client.Clie
 // execute tasks in containers for the run
 func ExecuteRun(run Run, mode string) error {
 
-	if mode == "all" {
-		fmt.Println("Running all tasks in run ...")
+	fmt.Println()
+	color.Magenta("Executing Containers ...")
+	fmt.Println()
 
-		for _, container := range run.Containers {
-			fmt.Println(container.Name)
+	// number of containers in this run
+	num_containers := len(run.Containers)
+
+	// loop over containers and execute their tasks
+	if mode == "all" {
+		for index, container := range run.Containers {
+
+			color.Magenta("--- Setting up container")
+			color.Magenta(fmt.Sprintf("Executing container %d of %d", index+1, num_containers))
+			color.Magenta(fmt.Sprintf("Container name: %s", container.Name))
+
 			container.executeTasks()
+
+			color.Green("Done executing container.")
+			fmt.Println()
 		}
 	}
+
+	fmt.Println()
+	fmt.Println("--------------------")
+	color.Green("Done executing all containers.")
+	fmt.Println()
 
 	return nil
 }

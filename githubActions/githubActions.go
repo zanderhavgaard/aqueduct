@@ -27,9 +27,10 @@ type Step struct {
 
 // each job in the workflow
 type Job struct {
-	Name   string `yaml:"name"`
-	RunsOn string `yaml:"runs-on"`
-	Steps  []Step `yaml:"steps"`
+	Name      string `yaml:"name"`
+	RunsOn    string `yaml:"runs-on"`
+	Container string `yaml:"container"`
+	Steps     []Step `yaml:"steps"`
 }
 
 // the entire workflow
@@ -67,12 +68,23 @@ func (w Workflow) MakeRun() (runner.Run, error) {
 			task := runner.Task{
 				Name: step.Name,
 			}
+
 			if step.Run != "" {
 				task.Type = "shell"
 				task.Command = step.Run
+
+				// if step has no name use command
+				if task.Name == "" {
+					task.Name = step.Run
+				}
 			} else if step.Uses != "" {
 				task.Type = "github-action"
 				task.Uses = step.Uses
+
+				// if step has no name use command
+				if task.Name == "" {
+					task.Name = step.Uses
+				}
 			} else {
 				panic("Step type not implemented")
 			}
@@ -82,7 +94,11 @@ func (w Workflow) MakeRun() (runner.Run, error) {
 		// default image
 		image := "ubuntu:latest"
 
-		if jobConfig.RunsOn == "ubuntu-latest" {
+		// TODO parse container image from yaml
+		// TODO look into parsing which container image to use based on uses actions
+		if jobConfig.Container != "" {
+			image = jobConfig.Container
+		} else if jobConfig.RunsOn == "ubuntu-latest" {
 			image = "ubuntu:latest"
 		}
 

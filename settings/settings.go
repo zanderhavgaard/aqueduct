@@ -6,18 +6,24 @@ type Settings struct {
 	// which file to run
 	Filename string
 	// how to execute the pipeline
-	ExecutionMode string
-	Verbose       bool
-	Debug         bool
-	SkipImagePull bool
+	ExecutionMode               string
+	Verbose                     bool
+	Debug                       bool
+	SkipImagePull               bool
+	RemoveConflictingContainers bool
+	GracefulContainerShutdown   bool
+	RemoveContainers            bool
 }
 
 // create global settings struct with defaults
 var Global Settings = Settings{
-	Platform:      "github-actions",
-	Filename:      "",
-	ExecutionMode: "all",
-	Verbose:       false,
-	Debug:         false,
-	SkipImagePull: false,
+	Platform:                    "github-actions",
+	Filename:                    "",
+	ExecutionMode:               "all",
+	Verbose:                     false,
+	Debug:                       false,
+	SkipImagePull:               false,
+	RemoveConflictingContainers: false,
+	GracefulContainerShutdown:   true,
+	RemoveContainers:            true,
 }

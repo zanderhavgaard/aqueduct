@@ -30,6 +30,9 @@ func main() {
 	settings.Global.Verbose = true
 	settings.Global.Debug = true
 	settings.Global.SkipImagePull = true
+	settings.Global.RemoveContainers = true
+	settings.Global.RemoveConflictingContainers = true
+	settings.Global.GracefulContainerShutdown = false
 
 	// print the banner
 	// fmt.Println(banner)
@@ -60,6 +63,7 @@ func main() {
 	// execute the prepared run
 	color.Magenta("--- Run ---")
 	fmt.Println("Pipeline:", run.Name)
+	fmt.Println("Execution Mode:", settings.Global.ExecutionMode)
 	color.Magenta("-----------")
 	err = runner.ExecuteRun(run, settings.Global.ExecutionMode)
 	if err != nil {
