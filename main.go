@@ -23,6 +23,7 @@ const githubActionsPlatformName string = "github-actions"
 
 func main() {
 
+	// TODO move settings to a settings file
 	// execute all steps
 	// TODO make a parameter
 	// should be able to be specific job and specific step in job
