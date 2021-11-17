@@ -1,0 +1,17 @@
+---
+name: hello-world
+on: push
+jobs:
+  my-job:
+    runs-on: ubuntu-latest
+    # docker image with git
+    # container: bitnami/git:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: install git
+        run: apt update && apt install -y git
+
+      - name: print git remotes
+        run: git remote -v
