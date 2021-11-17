@@ -11,11 +11,11 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/fatih/color"
 )
 
 func (t Task) executeShellCommand(ctx context.Context, dockerClient *client.Client, containerResponse container.ContainerCreateCreatedBody) (int, error) {
-
-	fmt.Println("Executing shell command ...")
+	color.Blue(fmt.Sprintf("Executing shell command: %s", t.Command))
 
 	// setup command to execute as a slice
 	cmd := strings.Split(t.Command, " ")
@@ -24,23 +24,23 @@ func (t Task) executeShellCommand(ctx context.Context, dockerClient *client.Clie
 	execConfig := types.ExecConfig{
 		AttachStdout: true,
 		AttachStderr: true,
-		// Cmd:          []string{"cat", "/etc/os-release"},
-		Cmd: cmd,
+		Cmd:          cmd,
 	}
 
 	execCreateResponse, err := dockerClient.ContainerExecCreate(ctx, containerResponse.ID, execConfig)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(execCreateResponse)
+	execID := execCreateResponse.ID
 
-	execResponse, err := dockerClient.ContainerExecAttach(ctx, execCreateResponse.ID, types.ExecStartCheck{})
+	execResponse, err := dockerClient.ContainerExecAttach(ctx, execID, types.ExecStartCheck{})
 	if err != nil {
 		panic(err)
 	}
 	defer execResponse.Close()
 
 	// ===
+	// TODO figure out how to stream the output while the command runs instead of dumping the whole output after
 
 	// read the output
 	var outBuf, errBuf bytes.Buffer
@@ -69,22 +69,44 @@ func (t Task) executeShellCommand(ctx context.Context, dockerClient *client.Clie
 	if err != nil {
 		panic(err)
 	}
-	// stderr, err := ioutil.ReadAll(&errBuf)
-	// if err != nil {
-	// panic(err)
-	// }
-	res, err := dockerClient.ContainerExecInspect(ctx, execCreateResponse.ID)
+
+	stderr, err := ioutil.ReadAll(&errBuf)
+	if err != nil {
+		panic(err)
+	}
+
+	res, err := dockerClient.ContainerExecInspect(ctx, execID)
 	if err != nil {
 		panic(err)
 	}
 
 	exitCode := res.ExitCode
-	stdOut := string(stdout)
-	// stdErr := string(stderr)
+	stdOutString := string(stdout)
+	stdErrString := string(stderr)
 
-	fmt.Println("Exitcode", exitCode)
-	fmt.Println("stdOut", stdOut)
-	// fmt.Println("stdErr", stdErr)
+	if exitCode == 0 {
+		color.Green("Command executed successfully with exitcode 0")
+		color.Green("stdout from the command:")
+		color.Magenta("---")
+		fmt.Println(stdOutString)
+		color.Magenta("---")
+		if stdErrString != "" {
+			fmt.Println("---")
+			fmt.Println("stderr from the command:")
+			fmt.Println(stdErrString)
+		}
+	} else {
+		color.Red(fmt.Sprintf("Command exitted with a non-zero exitcode: %d", exitCode))
+		color.Red("stdout from the command:")
+		color.Magenta("---")
+		fmt.Println(stdOutString)
+		color.Magenta("---")
+		if stdErrString != "" {
+			color.Red("---")
+			color.Red("stderr from the command:")
+			fmt.Println(stdErrString)
+		}
+	}
 
 	// ====
 
