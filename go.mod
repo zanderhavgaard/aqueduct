@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/docker/docker v20.10.10+incompatible
 	github.com/fatih/color v1.13.0
+	github.com/go-git/go-git/v5 v5.4.2
 	github.com/goccy/go-yaml v1.9.4
 )
 
@@ -19,7 +20,6 @@ require (
 	github.com/emirpasic/gods v1.12.0 // indirect
 	github.com/go-git/gcfg v1.5.0 // indirect
 	github.com/go-git/go-billy/v5 v5.3.1 // indirect
-	github.com/go-git/go-git/v5 v5.4.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect

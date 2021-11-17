@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 	"os"
+
 	"github.com/go-git/go-git/v5"
 )
 
@@ -29,7 +30,8 @@ func findRepoName() string {
 	remotes, err := repo.Remotes()
 
 	for _, remote := range remotes {
-		fmt.Println("remote", remote)
+		fmt.Printf("%+v\n", remote)
+		fmt.Println("origin", remote.c)
 	}
 
 	os.Exit(0)
