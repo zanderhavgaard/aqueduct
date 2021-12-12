@@ -31,7 +31,7 @@ func findRepoName() string {
 
 	for _, remote := range remotes {
 		fmt.Printf("%+v\n", remote)
-		fmt.Println("origin", remote.c)
+		// fmt.Println("origin", remote.c)
 	}
 
 	os.Exit(0)

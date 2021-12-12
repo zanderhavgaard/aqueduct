@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -61,7 +60,7 @@ func (c Container) pullDockerImage() error {
 func (c Container) checkContainerNameIsFree(ctx context.Context, dockerClient *client.Client) (bool, error) {
 	color.Magenta("Checking that the container name is free ...")
 	free := true
-	options := types.ContainerListOptions{}
+	options := types.ContainerListOptions{All: true}
 	// get list of containers
 	containers, err := dockerClient.ContainerList(ctx, options)
 	if err != nil {
@@ -82,11 +81,10 @@ func (c Container) checkContainerNameIsFree(ctx context.Context, dockerClient *c
 func (c Container) StopAndRemoveByName(ctx context.Context, dockerClient *client.Client) error {
 	fmt.Println("Removing container with name", c.Name)
 	// get list of containers
-	options := types.ContainerListOptions{}
+	options := types.ContainerListOptions{All: true}
 	containers, err := dockerClient.ContainerList(ctx, options)
-	if err != nil {
-		panic(err)
-	}
+	panicIfErr(err)
+
 	// get the ID of the container with the matching name
 	id := ""
 	for _, container := range containers {
@@ -98,17 +96,20 @@ func (c Container) StopAndRemoveByName(ctx context.Context, dockerClient *client
 			}
 		}
 	}
+	if id == "" {
+		panic("Error: Could not find id of container")
+	}
 
-	timeout := time.Second * 0
-	err = dockerClient.ContainerStop(ctx, id, &timeout)
-	if err != nil {
-		panic(err)
-	}
-	removeOptions := types.ContainerRemoveOptions{}
+	// for manually stopping the container before removing it
+	// timeout := time.Second * 0
+	// err = dockerClient.ContainerStop(ctx, id, &timeout)
+	// panicIfErr(err)
+
+	// instead of manually stopping container first we can just force remove,
+	// saves having to check if the container is running first
+	removeOptions := types.ContainerRemoveOptions{Force: true}
 	err = dockerClient.ContainerRemove(ctx, id, removeOptions)
-	if err != nil {
-		panic(err)
-	}
+	panicIfErr(err)
 
 	return nil
 }
