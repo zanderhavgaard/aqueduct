@@ -12,6 +12,7 @@ import (
 func (t Task) executeGithubAction(ctx context.Context, dockerClient *client.Client, containerResponse container.ContainerCreateCreatedBody) (int, error) {
 
 	// check if uses task is a checkout action
+	// repo checkout is handled as a special case
 	isCheckoutAction := checkIfCheckoutAction(t.Uses)
 	fmt.Println(isCheckoutAction)
 	if isCheckoutAction {

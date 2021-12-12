@@ -2,7 +2,7 @@ package runner
 
 import (
 	"fmt"
-	"os"
+	"regexp"
 
 	"github.com/go-git/go-git/v5"
 )
@@ -14,10 +14,12 @@ func checkoutRepo() error {
 }
 
 func findRepoName() string {
+	// TODO there should be a simpler way to extract the remote name
+	// should be possible using the git module and not using regex,
+	// I just can't figure out how to get remote name from the struct...
+
 	// find the name of the git repository
-
 	repoName := ""
-
 	repoPath := "."
 
 	// open existing git repository
@@ -26,15 +28,22 @@ func findRepoName() string {
 		panic(err)
 	}
 
-	// get remotes
-	remotes, err := repo.Remotes()
+	// get the origin remote
+	origin, err := repo.Remote("origin")
+	panicIfErr(err)
 
-	for _, remote := range remotes {
-		fmt.Printf("%+v\n", remote)
-		// fmt.Println("origin", remote.c)
-	}
+	// convert to string
+	originString := origin.String()
 
-	os.Exit(0)
+	// get the <username>/<reponame> of the github repository
+	// this should work regardless of the repo was cloned with ssh or http
+	re := regexp.MustCompile("[github.com/|git@github.com:](\\w+/\\w+)\\ \\(fetch\\)")
+	match := re.FindStringSubmatch(originString)
+
+	// first element in slice is the entire match of the regex
+	// second element is the first match of the regex group
+	// therefore we only want what is in the group
+	repoName = match[1]
 
 	return repoName
 }
