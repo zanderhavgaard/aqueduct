@@ -2,15 +2,71 @@ package runner
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/zanderhavgaard/aqueduct/settings"
 )
 
 func checkoutRepo() error {
-	repoName := findRepoName()
-	fmt.Println(repoName)
+	// either attempt to clone the repository or bindmount the local repository
+	if settings.Global.GitCheckoutMode == "clone" {
+		repoName := findRepoName()
+		cloneRepo(repoName)
+	} else if settings.Global.GitCheckoutMode == "bindmount" {
+		fmt.Println("bindmount")
+		panic("not implemented")
+	} else {
+		panic("unknown git checkout mode, must be one of 'clone', 'bindmount'")
+	}
+
 	return nil
+}
+
+func cloneRepo(repoName string) {
+	// TODO figure how to handle auth for private repos
+
+	platformURL := ""
+	// TODO add other relevant platforms
+	if settings.Global.Platform == "github-actions" {
+		platformURL = "https://github.com/"
+	}
+	repoURL := platformURL + repoName
+
+	// find user home dir
+	userHome, err := os.UserHomeDir()
+	panicIfErr(err)
+
+	// build path to repo cache
+	clonePath := userHome + "/.cache/aqueduct/repos/" + repoName
+
+	// TODO be smarter about using cached repo instead of just deleting and recloning
+
+	// check if directory already exists
+	_, err = os.Stat(clonePath)
+	if os.IsNotExist(err) {
+		fmt.Println("Creating directories for repository")
+		// create dirs
+		os.MkdirAll(clonePath, 0755)
+
+	} else {
+		fmt.Println("Removing existing cached repo")
+		// remove directory and files
+		err = os.RemoveAll(clonePath)
+		panicIfErr(err)
+	}
+
+	fmt.Println("Cloning repository:", repoURL, "to directory:", clonePath)
+
+	// setup the options for the clone
+	cloneOptions := &git.CloneOptions{
+		URL:      repoURL,
+		Progress: os.Stdout,
+	}
+	// clone the repository form remote
+	_, err = git.PlainClone(clonePath, false, cloneOptions)
+	panicIfErr(err)
 }
 
 func findRepoName() string {

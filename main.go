@@ -24,10 +24,8 @@ const githubActionsPlatformName string = "github-actions"
 func main() {
 
 	// TODO move settings to a settings file
-	// execute all steps
-	// TODO make a parameter
-	// should be able to be specific job and specific step in job
-	// settings.Global.ExecutionMode = "all"
+	// TODO make parameters
+	settings.Global.ExecutionMode = "all"
 	settings.Global.Verbose = true
 	settings.Global.Debug = true
 	settings.Global.SkipImagePull = true

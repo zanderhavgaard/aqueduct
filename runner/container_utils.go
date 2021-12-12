@@ -12,6 +12,22 @@ import (
 	"github.com/zanderhavgaard/aqueduct/settings"
 )
 
+func (c Container) copyFilesFromHost(hostPath string, containerPath string) {
+	// copy files from hostPath to containerPath
+
+	panic("not implemented")
+
+	ctx := context.Background()
+	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
+	panicIfErr(err)
+
+	// TODO finish implementing
+	content := nil
+	options := types.CopyToContainerOptions{}
+	err = dockerClient.CopyToContainer(ctx, c.ID, containerPath, content, options)
+
+}
+
 func (c Container) pullDockerImage() error {
 	if settings.Global.SkipImagePull {
 		color.Green("Skipping docker image pull.")

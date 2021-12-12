@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 
 	"github.com/docker/docker/api/types/container"
@@ -14,7 +13,6 @@ func (t Task) executeGithubAction(ctx context.Context, dockerClient *client.Clie
 	// check if uses task is a checkout action
 	// repo checkout is handled as a special case
 	isCheckoutAction := checkIfCheckoutAction(t.Uses)
-	fmt.Println(isCheckoutAction)
 	if isCheckoutAction {
 		err := checkoutRepo()
 		if err != nil {
@@ -27,7 +25,7 @@ func (t Task) executeGithubAction(ctx context.Context, dockerClient *client.Clie
 
 func checkIfCheckoutAction(action string) bool {
 	// TODO should be able to handle different versions of the checkout action
-	checkoutActionRegex := regexp.MustCompile("actions/checkout@v2")
+	checkoutActionRegex := regexp.MustCompile("actions/checkout@v\\d+")
 	found := checkoutActionRegex.MatchString(action)
 	if found {
 		return true
